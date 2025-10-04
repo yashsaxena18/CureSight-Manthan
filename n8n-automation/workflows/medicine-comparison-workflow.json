@@ -1,0 +1,143 @@
+{
+  "name": "AI Medicine Comparison Workflow",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medicine-analysis",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": false
+        }
+      },
+      "id": "webhook-medicine-input",
+      "name": "Medicine Input Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ {\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a medical AI expert. Provide comprehensive medicine comparison across Allopathic, Ayurvedic, and Homeopathic systems. Return only valid JSON without markdown formatting.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": `Analyze ${$node['Medicine Input Webhook'].json.medicineName} and provide comparison in this exact JSON format:\n{\n  \"medicine\": \"${$node['Medicine Input Webhook'].json.medicineName}\",\n  \"condition\": \"Primary condition treated\",\n  \"allopathic\": {\n    \"name\": \"Brand/Generic names\",\n    \"dosage\": \"Recommended dosage\",\n    \"mechanism\": \"How it works\",\n    \"sideEffects\": [\"List of side effects\"],\n    \"effectiveness\": \"85%\",\n    \"cost\": \"Rs 50-200\",\n    \"duration\": \"4-6 hours\",\n    \"pros\": [\"Advantages\"],\n    \"cons\": [\"Disadvantages\"]\n  },\n  \"ayurvedic\": {\n    \"name\": \"Natural alternatives\",\n    \"dosage\": \"Traditional dosage\",\n    \"mechanism\": \"Natural mechanism\",\n    \"sideEffects\": [\"Side effects\"],\n    \"effectiveness\": \"70%\",\n    \"cost\": \"Rs 100-300\",\n    \"duration\": \"6-8 hours\",\n    \"pros\": [\"Natural benefits\"],\n    \"cons\": [\"Limitations\"]\n  },\n  \"homeopathic\": {\n    \"name\": \"Homeopathic options\",\n    \"dosage\": \"Homeopathic dosage\",\n    \"mechanism\": \"Homeopathic principle\",\n    \"sideEffects\": [\"Side effects\"],\n    \"effectiveness\": \"50%\",\n    \"cost\": \"Rs 200-500\",\n    \"duration\": \"Variable\",\n    \"pros\": [\"Benefits\"],\n    \"cons\": [\"Limitations\"]\n  },\n  \"aiInsights\": {\n    \"bestFor\": \"Best use case\",\n    \"warnings\": [\"Warnings\"],\n    \"recommendations\": [\"Recommendations\"]\n  }\n}`\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 2500\n} }}",
+        "options": {}
+      },
+      "id": "openai-analysis-node",
+      "name": "OpenAI Medicine Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const medicineName = $input.first().json.medicineName || 'Unknown Medicine';\n\n// Generate purchase links function\nconst generatePurchaseLinks = (system, medicine) => {\n  const searchTerm = system === 'allopathic' ? medicine : `${medicine} ${system}`;\n  \n  return [\n    {\n      platform: 'Amazon India',\n      category: system,\n      url: `https://www.amazon.in/s?k=${encodeURIComponent(searchTerm + ' medicine')}`,\n      directLink: `https://www.amazon.in/s?k=${encodeURIComponent(searchTerm)}`,\n      price: 'Check on site',\n      availability: 'Available'\n    },\n    {\n      platform: 'Flipkart',\n      category: system,\n      url: `https://www.flipkart.com/search?q=${encodeURIComponent(searchTerm)}`,\n      directLink: `https://www.flipkart.com/search?q=${encodeURIComponent(searchTerm)}`,\n      price: 'Check on site',\n      availability: 'Available'\n    },\n    {\n      platform: '1mg',\n      category: system,\n      url: `https://www.1mg.com/search/all?name=${encodeURIComponent(searchTerm)}`,\n      directLink: `https://www.1mg.com/search/all?name=${encodeURIComponent(searchTerm)}`,\n      price: 'Check on site',\n      availability: system === 'allopathic' ? 'Prescription may be required' : 'Available'\n    },\n    {\n      platform: 'Netmeds',\n      category: system,\n      url: `https://www.netmeds.com/catalogsearch/result?q=${encodeURIComponent(searchTerm)}`,\n      directLink: `https://www.netmeds.com/catalogsearch/result?q=${encodeURIComponent(searchTerm)}`,\n      price: 'Check on site',\n      availability: 'Available'\n    },\n    {\n      platform: 'PharmEasy',\n      category: system,\n      url: `https://pharmeasy.in/search/all?name=${encodeURIComponent(searchTerm)}`,\n      directLink: `https://pharmeasy.in/search/all?name=${encodeURIComponent(searchTerm)}`,\n      price: 'Check on site',\n      availability: 'Available'\n    }\n  ];\n};\n\ntry {\n  // Get AI response\n  const aiResponse = $input.first().json;\n  \n  if (!aiResponse.choices || !aiResponse.choices[0]) {\n    throw new Error('Invalid OpenAI response format');\n  }\n  \n  // Parse AI analysis\n  let analysis;\n  try {\n    const content = aiResponse.choices[0].message.content.trim();\n    // Clean any markdown formatting\n    const cleanContent = content.replace(/``````\\n?/g, '').trim();\n    analysis = JSON.parse(cleanContent);\n  } catch (parseError) {\n    console.log('AI parsing failed, using fallback data');\n    \n    // Fallback analysis structure\n    analysis = {\n      medicine: medicineName,\n      condition: `Treatment for ${medicineName} related conditions`,\n      allopathic: {\n        name: `${medicineName} (Generic/Branded)`,\n        dosage: \"As prescribed by healthcare provider\",\n        mechanism: \"Modern pharmaceutical mechanism of action\",\n        sideEffects: [\"Consult healthcare provider for specific side effects\"],\n        effectiveness: \"75%\",\n        cost: \"Rs 50-300\",\n        duration: \"4-8 hours\",\n        pros: [\"Fast-acting\", \"Well-researched\", \"Standardized dosage\"],\n        cons: [\"May have side effects\", \"Prescription often required\"]\n      },\n      ayurvedic: {\n        name: \"Natural herbal alternatives\",\n        dosage: \"As recommended by Ayurvedic practitioner\",\n        mechanism: \"Natural healing through herbal compounds\",\n        sideEffects: [\"Generally minimal\", \"Possible allergic reactions\"],\n        effectiveness: \"65%\",\n        cost: \"Rs 100-500\",\n        duration: \"6-12 hours\",\n        pros: [\"Natural ingredients\", \"Holistic approach\", \"Fewer side effects\"],\n        cons: [\"Slower onset\", \"Quality variation\", \"Limited studies\"]\n      },\n      homeopathic: {\n        name: \"Homeopathic potentized medicines\",\n        dosage: \"As prescribed by qualified homeopath\",\n        mechanism: \"Stimulates body's natural healing response\",\n        sideEffects: [\"Rare side effects\", \"Generally very safe\"],\n        effectiveness: \"45%\",\n        cost: \"Rs 200-800\",\n        duration: \"Variable response time\",\n        pros: [\"No side effects\", \"Safe for all ages\", \"Individualized treatment\"],\n        cons: [\"Limited scientific evidence\", \"Individual variation\", \"Requires expert consultation\"]\n      },\n      aiInsights: {\n        bestFor: \"Consult healthcare professionals for personalized treatment advice\",\n        warnings: [\"Do not self-medicate\", \"Consult qualified practitioners\", \"Consider your medical history\"],\n        recommendations: [\"Seek professional medical advice\", \"Consider multiple treatment approaches\", \"Monitor for any adverse effects\"]\n      }\n    };\n  }\n  \n  // Add purchase links to each treatment system\n  if (analysis.allopathic) {\n    analysis.allopathic.purchaseLinks = generatePurchaseLinks('allopathic', medicineName);\n  }\n  if (analysis.ayurvedic) {\n    analysis.ayurvedic.purchaseLinks = generatePurchaseLinks('ayurvedic', medicineName);\n  }\n  if (analysis.homeopathic) {\n    analysis.homeopathic.purchaseLinks = generatePurchaseLinks('homeopathic', medicineName);\n  }\n  \n  // Add metadata\n  analysis.disclaimer = \"This AI-generated comparison is for informational purposes only. Always consult qualified healthcare providers before making medical decisions.\";\n  analysis.generatedAt = new Date().toISOString();\n  analysis.processingTime = Date.now();\n  analysis.version = \"2.0\";\n  analysis.source = \"CureSight AI Medicine Comparison\";\n  \n  return [{\n    json: {\n      success: true,\n      data: analysis,\n      metadata: {\n        processedAt: new Date().toISOString(),\n        medicine: medicineName,\n        systemsAnalyzed: ['allopathic', 'ayurvedic', 'homeopathic'],\n        purchaseLinksCount: 15 // 5 platforms × 3 systems\n      }\n    }\n  }];\n  \n} catch (error) {\n  console.error('Processing error:', error.message);\n  \n  return [{\n    json: {\n      success: false,\n      error: 'Failed to process medicine analysis',\n      message: error.message,\n      medicine: medicineName,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}"
+      },
+      "id": "process-and-enhance",
+      "name": "Process & Add Purchase Links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseHeaders": {
+          "entries": [
+            {
+              "name": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "name": "Access-Control-Allow-Methods",
+              "value": "POST, GET, OPTIONS"
+            },
+            {
+              "name": "Access-Control-Allow-Headers",
+              "value": "Content-Type"
+            }
+          ]
+        }
+      },
+      "id": "webhook-response",
+      "name": "Send Final Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1020, 300]
+    }
+  ],
+  "connections": {
+    "Medicine Input Webhook": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Medicine Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Medicine Analysis": {
+      "main": [
+        [
+          {
+            "node": "Process & Add Purchase Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process & Add Purchase Links": {
+      "main": [
+        [
+          {
+            "node": "Send Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "medicine",
+      "id": "med-comparison"
+    },
+    {
+      "name": "ai",
+      "id": "artificial-intelligence"
+    },
+    {
+      "name": "healthcare", 
+      "id": "health-automation"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-10-04T10:23:00.000Z",
+  "versionId": "2.0"
+}
